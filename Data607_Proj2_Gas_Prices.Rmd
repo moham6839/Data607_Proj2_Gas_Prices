@@ -1,0 +1,227 @@
+---
+title: "Breakdown of Weekly Gas Prices in New York State"
+author: "Mohamed Hassan-El Serafi"
+date: "2023-03-05"
+output: html_document
+---
+
+My analysis focuses on weekly gas price data of New York State counties from 2007-2023. I will focus on the monthly gas price averages, as well as which year had the highest gas prices. I obtained this dataset from the New York State Data website. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(janitor)
+```
+
+```{r}
+df <- read.csv("https://raw.githubusercontent.com/moham6839/Data607_Proj2_Gas_Prices/main/Gasoline_Retail_Prices_Weekly_Average_by_Region__Beginning_2007.csv", check.names=FALSE)
+head(df)
+```
+
+
+
+
+I looked for NA values, and there were a lot:
+
+
+```{r}
+sum(is.na(df))
+```
+
+I wanted to have a look at which columns contained NA values and how many were in each:
+
+
+```{r}
+colnames(df)[colSums(is.na(df)) > 0]
+```
+
+```{r}
+colSums(is.na(df))
+```
+
+
+For the purposes of this analysis, I dropped columns that contained NA values, since I wanted to look at the counties that contained all gas price values from 2007 until 2023:
+
+
+```{r}
+new_df <- df %>%
+  select_if(~ !any(is.na(.)))
+head(new_df)
+```
+
+
+I dropped the New York State column, since it contains values of the overall average of gas prices of the counties in the state and is not an actual county:
+
+
+```{r}
+new_df1 <- select(new_df, -2)
+```
+
+
+
+```{r}
+sum(is.na(new_df1))
+```
+
+## Transforming Date column
+
+I transformed the column type from character to date:
+
+
+```{r}
+new_df1$Date <- mdy(new_df1$Date)
+```
+
+
+
+```{r}
+head(new_df1)
+```
+
+## Cleaning Column Names
+
+I removed the ($/gal) symbol from each of the column names:
+
+
+```{r}
+colnames(new_df1) <- sub("\\(.*", "", colnames(new_df1))
+colnames(new_df1)
+```
+
+
+In addition, I removed Average from each column in order to have just the name of the county:
+
+```{r}
+colnames(new_df1) <- gsub("Average", "", colnames(new_df1))
+head(new_df1)
+```
+
+
+
+
+## Using Pivot_Longer
+
+I used pivot_longer to transform the data, creating a column called "Price_Per_Gallon" that contained the weekly gas prices of the New York State counties since 2007:
+
+
+```{r}
+df_longer1 <- new_df1 %>%
+  pivot_longer(cols = c(2:9), names_to = "County", values_to = "Price_Per_Gallon")
+df_longer1
+
+knitr::kable(df_longer1, "pipe", align=c("l", "c", "c"))
+```
+
+
+
+
+
+Using the separate function in tidyr, I separated the Year and Month of the dates in the Date column:
+
+
+```{r}
+new_data <- df_longer1 %>%
+  separate(Date, into=c("Year", "Month"))
+head(new_data)
+```
+
+I transformed the numbers of the new Month column into abbreviations:
+
+
+```{r}
+new_data <- new_data %>%
+  mutate(Month = month.abb[as.numeric(Month)])
+head(new_data)
+```
+
+## Gas Prices by County:
+
+I examined the overall average gas price for each county from 2007 to 2023:
+
+
+```{r}
+mean_county <- new_data %>%
+  select(County, Price_Per_Gallon) %>%
+  group_by(County) %>%
+  summarise(Mean_Per_County = round(mean(Price_Per_Gallon), 2)) %>%
+  arrange(desc(Mean_Per_County))
+mean_county
+```
+
+
+
+```{r}
+new_data %>%
+  select(County, `Price_Per_Gallon`) %>%
+  group_by(County) %>%
+  summarise(Gas_Prices = round(mean(`Price_Per_Gallon`), 2)) %>%
+  ggplot(aes(x = reorder(County, -Gas_Prices), y=Gas_Prices, fill=County)) +
+  geom_bar(stat='identity', position='dodge', width=0.7) +
+  labs(title = "Average Gas Prices Per New York County",
+       y="Average Gas Prices",
+       x="County")
+```
+
+
+New York City had the highest average gas price, while Syracuse had the lowest.
+
+
+## Overall Gas Prices by Year
+
+I looked at the average gas prices in each year:
+
+
+```{r}
+new_data_year <- new_data %>%
+   group_by(Year) %>% 
+   summarise(Price_Per_Gallon = round(mean(Price_Per_Gallon), 2))
+new_data_year
+```
+
+
+```{r}
+ggplot(new_data_year, aes(x = reorder(Year, -Price_Per_Gallon), y = Price_Per_Gallon)) +
+   geom_col() +
+  labs(title="Average Gas Prices Per Year",
+       y="Price Per Gallon",
+       x="Year")
+```
+
+Gas prices were at its highest in 2022, with prices at over $4 per gallon. The lowest average gas price occurred in 2016.
+
+
+## Gas prices Per Month
+
+I examined the gas prices per month, looking to see which month were gas prices the highest and lowest:
+
+```{r}
+new_data_month <- new_data %>%
+  select(County, Price_Per_Gallon, Month, Year) %>%
+  group_by(Month) %>%
+  summarise(Mean_Per_County = round(mean(Price_Per_Gallon), 2)) %>%
+  arrange(desc(Mean_Per_County))
+new_data_month
+```
+
+```{r}
+ggplot(new_data_month, aes(x = reorder(Month, -Mean_Per_County), y = Mean_Per_County)) +
+   geom_col() +
+  labs(title="Average Gas Prices Per Month",
+       y="Price Per Gallon",
+       x="Month")
+```
+The highest average gas price occurred in June, with the lowest occurring in February.
+
+
+
+
+## Conclusion
+
+During warm weather months, gas prices on average were at its highest. The 3 months with the highest averages were, in order, June, July, and May, while the 3 months with the lowest averages were February, January, and December. When analyzing average gas prices per year, 2022 ranked the highest, followed by 2012 and 2013. The 3 years that had the lowest gas price average were 2016, 2020, and 2009. 2022 was the only year that had a gas price average over $4 per gallon, which is the year the United States experience an increase in inflation. When comparing each county, New York City had the highest gas price average, while Syracuse had the lowest gas price average.
+
+
